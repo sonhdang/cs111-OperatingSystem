@@ -63,13 +63,138 @@ int pipe2(int pipefd[2], int flags);
 * The array `pipefd` is used to return two file descriptors referring to the ends of the pipe
 	* `pipefd[0]` refers to the read end of the pipe
 	* `pipefd[1]` refers to the write end of the pipe.
-* Data written to the write end of the pipe is buffered by the kernel until it is read from teh read end of the pipe.
+* Data written to the write end of the pipe is buffered by the kernel until it is read from the read end of the pipe.
+* Example Program: the following program creates a pipe, and the `fork(2)`s to create a child process; the child inherits a duplicate set of file descriptors that refer to the same pipe. After the `fork(2)`, each process closes the file descriptors that it doesn't need for the pipe (see `pipe(7)`). The parent then writes the string contained in the program's command-line argument to the pipe, and the child reads this string a byte at a time from the pipe and echoes it on standard output.
+
+```c
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+
+int
+main(int argc, char *argv[])
+{
+   int pipefd[2];
+   pid_t cpid;
+   char buf;
+
+   if (argc != 2) {
+       fprintf(stderr, "Usage: %s <string>\n", argv[0]);
+       exit(EXIT_FAILURE);
+   }
+
+   if (pipe(pipefd) == -1) {
+       perror("pipe");
+       exit(EXIT_FAILURE);
+   }
+
+   cpid = fork();
+   if (cpid == -1) {
+       perror("fork");
+       exit(EXIT_FAILURE);
+   }
+
+   if (cpid == 0) {    /* Child reads from pipe */
+       close(pipefd[1]);          /* Close unused write end */
+
+       while (read(pipefd[0], &buf, 1) > 0)
+           write(STDOUT_FILENO, &buf, 1);
+
+       write(STDOUT_FILENO, "\n", 1);
+       close(pipefd[0]);
+       _exit(EXIT_SUCCESS);
+
+   } else {            /* Parent writes argv[1] to pipe */
+       close(pipefd[0]);          /* Close unused read end */
+       write(pipefd[1], argv[1], strlen(argv[1]));
+       close(pipefd[1]);          /* Reader will see EOF */
+       wait(NULL);                /* Wait for child */
+       exit(EXIT_SUCCESS);
+   }
+}
+```
+
 * For more, please read: <https://man7.org/linux/man-pages/man2/pipe.2.html>
 * Youtube videos:
 	* Pipe() tutorial for linux <https://youtu.be/uHH7nHkgZ4w>
 	* C Programming in Linux Tutorial #037 - pipe() Function <https://youtu.be/7bNMkvcOKlc>
 
+### exec()
+
+```c
+int execv(const char *pathname, char *const argv[]);
+int execvp(const char *file, char *const argv[]);
+int execvpe(const char *file, char *const argv[], char *const envp[]);
+```
+
+* The `exec()` family of functions replaces the current process image with a new process image.
+* The initial argument for these functions is the name of a file that is to be executed.
+* Source:
+	* <https://man7.org/linux/man-pages/man3/exec.3.html>
+	* <https://www.youtube.com/watch?v=kDxjcyHu_Qs>
+
+### poll()
+
+```c
+int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+```
+
+* `poll()` waits for one of a set of file descriptors to become ready to perform I/O.
+* The set of file descriptors to be monitored is specified in the `fds` argument, which is an array of structures of the following form:
+
+```c
+struct pollfd {
+	int   fd;         /* file descriptor */
+	short events;     /* requested events */
+	short revents;    /* returned events */
+};
+```
+
+The caller should specify the number of items in the fds array in nfds.
+
+* The field `fd` contains a file descriptor for an open file.  If this field is negative, then the corresponding `events` field is ignored and the `revents` field returns zero.  (This provides an easy way of ignor‐ing a file descriptor for a single poll() call: simply negate the fd field.  Note, however, that this technique can't be used to ignore file descriptor 0.)
+* The field `events` is an input parameter, a bit mask specifying the events the application is interested in for the file descriptor `fd`. This field may be specified as zero, in which case the only events that can be returned in `revents` are `POLLHUP`, `POLLERR`, and `POLLNVAL`.
+* The field `revents` is an output parameter, filled by the kernel with the events that actually occurred.  The bits returned in `revents` can include any of those specified in `events`, or one of the values `POLLERR`, `POLLHUP`, or `POLLNVAL`. (These three bits are meaningless in the `events` field, and will be set in the `revents` field whenever the corresponding condition is true.)
+* If none of the events requested (and no error) has occurred for any of the file descriptors, then `poll()` blocks until one of the events occurs.
+* The timeout argument specifies the number of milliseconds that poll() should block waiting for a file descriptor to become ready. The call will block until either:
+	* a file descriptor becomes ready;
+	* the call is interrupted by a signal handler; or
+	* the timeout expires.
+* Note that the timeout interval will be rounded up to the system clock granularity, and kernel scheduling delays mean that the blocking interval may overrun by a small amount.  Specifying a negative value in timeout means an infinite timeout.  Specifying a timeout of zero causes poll() to return immediately, even if no file descriptors are ready.
+* Return value:
+	* On success, `poll()` returns a nonnegative value which is the number of elements in the `pollfds` whose `revents` fields have been set to a nonzero value (indicating an event or an error).
+	* A return value of zero indicates that the system call timed out before any file descriptors became read.
+	* On error, -1 is returned, and errno is set to indicate the cause of the error.
+* Source:
+	* <https://youtu.be/UP6B324Qh5k>
+	* <https://man7.org/linux/man-pages/man2/poll.2.html>
+
+### dup() and dup2()
+
+```c
+int dup(int oldfd);
+int dup2(int oldfd, int newfd)
+```
+
+* The `dup()` systemcall creates a copy of the file descriptor `oldfd`, using the lowest-numbered unused file descriptor for the new descriptor
+* The `dup2()` system call performs the same task as `dup()`, but instead of using the lowest-numbered unused file descriptor, it uses the file descriptor number specified in `newfd`. If the file descriptor `newfd` was previously open, it is silently closed before being reused.
+* Source:
+	* <https://man7.org/linux/man-pages/man2/dup.2.html>
+	* <https://www.youtube.com/watch?v=EqndHT606Tw
+
+### kill()
+
+```c
+int kill(pid_t pid, int sig);
+```
+
 ### signal()
+
+* Source:
+	* <https://youtu.be/rggw61JtGz0>
 
 ### termios
 * The termios functions describe a general terminal interface that is provided to control asynchronous communications ports. Those functions include:
@@ -91,3 +216,57 @@ int tcflow(int fd, int action);
 	* c_iflag = ISTRIP;
 	* c_oflag = 0;
 	* c_lflag = 0;
+
+## Understanding the projects
+* Instead of constructing a set of correct terminal modes from scracth, it was suggested that we make a copy of the  current terminal and change the flags to:
+
+```c
+	c_iflag = ISTRIP;
+	c_oflag = 0;
+	c_lflag = 0;
+```
+
+* Understanding canonical and non-canonical mode.
+	* Canonical mode: What you type are visible on the STDOUT_FILENO (usually the screen) and you can edit what you type with *backspace* and *kill* **characters**.
+		* Note that *backspace* and *kill* are **characters** which affects what the programs read in.
+		* Even though all the characters are visible on the terminal, it was not read until it reaches the *return* character which signal the end of line.
+		* Only after then does the program execute `read()` and if there is a `write()` function call, the text will then be displayed after being processed with the current **termios mode**.
+		* An example of canonical mode is the command `cat`. When you execute the command `cat`, its input file is `STDIN` and its output file is `STDOUT`. `cat` read lines by line. Therefore when you type characters out, `cat` shows you what you have entered and erase characters when you use *backspace*. It's not until you pressed the *return* key does cat start to read in the text and write to `STDOUT`
+	* Non-canonical mode: When a character is pressed, it is immediately read in the program. It does not wait for the *return* key to start process the text. Therefore, if you have a text "asdf\BackSpace", it will be read in "a" then "s" then "d" then "f" then "\BackSpace" instead of "asdf\Backspace" all at the same time.
+	* For more, please read: <https://stackoverflow.com/questions/358342/canonical-vs-non-canonical-terminal-input>
+
+## Problems encountered
+
+#### Cannot figure out a way to map <cr> or <lf> into <cr><lf>.
+
+* It actually turned out that because the terminal is in non-canonical mode, I need to process individual character read in.
+* Therefore I just need to compare if the character in the buffer is equal to the carriage return character '\r'  and write out '\r' with '\n' instead.
+
+#### Cannot send EOF signal to the terminal with ctrl-D
+
+* The reason for this problem was pressing ctrl-D is read as **EOT**, not the macro **EOF** in `<stdio.h>`.
+* I didn't know that was the case so I kept comparing the character with **EOF**.
+* I figured out after trying to print out all the characters in decimal instead of char (because there is no representation for **EOT** in char)
+* I got number 4 for printing out **EOT**.
+* Then I look it up on the ASCII table and find out it is **EOT**.
+* I make a `const char EOT = 0x04;` and compare the character in the buffer with `EOT`.
+
+#### Should the parent process still `wait()` after the child process call `exec()`?
+
+* In the case where there is only `fork()`, the parent should wait for the child process to terminate and return to ensure that the child process terminate correctly, before the parent process terminate.
+* Answer from stackoverflow: "You need to distinguish the **process** from the **program**. Calling `exec` runs a different program in the same process. The `exec` function doesn't return (except to signal an error) because it terminates the program that calls in. However, the process is reused to run a different program. In a way, from the perspective of the process running `exec`, the `exec` functions returns as the entry point of the new program. From the point of view of the parent, there's still a child process. That's all the parent knows. The parent doesn't know that the child called `exec`, unless it watches it and finds out by indirect means such as running `ps`. The parent is just waiting for the child process to exit, no matter what program the child proccess happens to be running."
+* Source: <https://stackoverflow.com/questions/35710102/if-you-fork-and-exec-from-the-child-process-and-wait-in-the-parent-how-doe>
+
+## Miscelaneous
+
+#### MACRO
+
+* Carriage Return (CR) means going to the left most of the line
+* New Line (NL) means going down one line.
+* When press enter on the keyboard, the behavior triggered by the enter key is determined by whether our terminal interpret it as a CR, NL or CR-NL.
+* For `c_iflag`:
+	* INLCR: translate NL to CR on input
+	* ICRNL: translate CR to NL on input
+* For `c_oflag`:
+	* ONCLR: Map NL to CR-NL on output
+	* OCRNL: Map CR to NL on ouput

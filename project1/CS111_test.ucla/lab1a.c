@@ -11,7 +11,6 @@
 #include <string.h>
 #include <poll.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <signal.h>
 
 /* Saving the current terminal while setting up new terminal */
@@ -38,7 +37,7 @@ void setTermios(struct termios* current)
 void handler(int num) {
     char buffer[50];
     sprintf(buffer, "SHELL EXIT SIGNAL=%d STATUS=%d", num & 0x007f, num & 0xff00);
-    write(STDOUT_FILENO, buffer, 50);
+    write(STDERR_FILENO, buffer, 50);
     exit(EXIT_FAILURE);
 }
 
@@ -52,8 +51,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "%s", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    // Setting buffer size to 10 to account for buffering
-    char buf[10];
+    // Setting buffer size to 5 to account for buffering
+    char buf[5];
     char message[256];
     int byteCount_buf = 0;
     int byteCount_message = 0;
@@ -69,12 +68,12 @@ int main(int argc, char *argv[])
     int pipefd_write[2];
     // pipefd_read for the parent to read from the child
     int pipefd_read[2];
+    // Variables for poll()
+    int p;
     // Process ID for the fork() function call
     int pid;
-    // Returning status of Child process
-    int *status = malloc(sizeof(int));
 
-    
+    setTermios(original);
 
     /* OPTION --shell=program */
     while(1)
@@ -95,7 +94,6 @@ int main(int argc, char *argv[])
         switch (c)
         {
             case 's':
-                setTermios(original);
                 signal(SIGPIPE, handler);
                 /* pipe error check */
                 if (pipe(pipefd_write) == -1 || pipe(pipefd_read) == -1) 
@@ -115,7 +113,7 @@ int main(int argc, char *argv[])
                 
                 else if (pid == 0)   /* Child Process */
                 {
-                    /* Closing unused ends of pipes */
+                    /* Closing unused end of pipes */
                     close(pipefd_write[1]);
                     close(pipefd_read[0]);
 
@@ -140,7 +138,7 @@ int main(int argc, char *argv[])
                 }
                 else            /* Parent Procss */
                 {
-                    /* Closing unused ends of pipes */
+                    /* Closing unused end of pipes */
                     close(pipefd_write[0]);
                     close(pipefd_read[1]);
 
@@ -157,7 +155,7 @@ int main(int argc, char *argv[])
 
                     while(1)
                     {
-                        poll(pollfds, 2, -1);
+                        p = poll(pollfds, 2, -1);
                         if (pollfds[0].revents & POLLIN)        // Input from the Terminal
                         {
                             byteCount_buf = read(STDIN_FILENO, buf, sizeof(buf));
@@ -169,7 +167,7 @@ int main(int argc, char *argv[])
                             else if (buf[0] == EOT)
                             {
                                 /* Closing pipes to the shell */
-                                kill(pid, SIGINT);
+                                close(pipefd_write[1]);
                             }
                             else if (buf[0] == INTERRUPT)
                             {
@@ -198,21 +196,20 @@ int main(int argc, char *argv[])
                             close(pipefd_read[0]);
                             tcflush(STDIN_FILENO, TCIOFLUSH);
                             tcsetattr(STDOUT_FILENO, TCSANOW, original);
-                            break;
+                            exit(EXIT_SUCCESS);
                         }
                     }
                     /* Wait for the Child process to terminate */
-                    waitpid(pid, status, 0);
-                    exit(EXIT_SUCCESS);
+                    if (pid != 0)
+                        waitpid(pid, NULL, 0);
                 }
                 break;
             default:
-                exit(EXIT_FAILURE);
+                exit(EXIT_SUCCESS);
         }
     }
 
     /* WITHOUT OPTION */
-    setTermios(original);
     while(1)
     {
         byteCount_buf = read(STDIN_FILENO, buf, sizeof(buf));
@@ -233,6 +230,6 @@ int main(int argc, char *argv[])
     tcflush(STDIN_FILENO, TCIOFLUSH);
     tcsetattr(STDOUT_FILENO, TCSANOW, original);
 
-    exit(EXIT_SUCCESS);
+    return 0;
 
 }
