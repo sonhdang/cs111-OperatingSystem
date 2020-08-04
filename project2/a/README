@@ -1,0 +1,15 @@
+NAME: Son Dang
+EMAIL: sonhdang@ucla.edu
+ID: 105215636
+
+QUESTION 2.1.1 - causing conflicts:
+Why does it take many iterations before errors are seen?
+Why does a significantly smaller number of iterations so seldom fail?
+Because computers are generally really fast. One instructions can be executed in
+a few nano seconds. Therefore, most operations will be able to run to finish before
+another operation runs. However, there will still be a small percentage of operations
+being executed in race condition. Since the probability of that happening is small, 
+we might only see it if we do it many many times. A small number of iteration might
+not produce the outcome of the rarer events since there is a higher chance of the
+usual event happening (no race condition). This is analogous to The Law of Large 
+Numbers in the field of Statistics.
