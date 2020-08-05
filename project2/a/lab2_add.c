@@ -160,6 +160,8 @@ int main(int argc, char *argv[])
         }
     }
 
+    clock_ret = clock_gettime(CLOCK_MONOTONIC, &end_time);          //END TIME
+
     switch(opt_sync)
     {
         case 'm':
@@ -174,8 +176,6 @@ int main(int argc, char *argv[])
         default:
             strcat(test, "-none");
     }
-
-    clock_ret = clock_gettime(CLOCK_MONOTONIC, &end_time);          //END TIME
 
     long long start_ns = start_time.tv_sec * 1000000000 + start_time.tv_nsec;
     long long end_ns = end_time.tv_sec * 1000000000 + end_time.tv_nsec;

@@ -2,6 +2,39 @@ NAME: Son Dang
 EMAIL: sonhdang@ucla.edu
 ID: 105215636
 
+FILE DESCRIPTION
+
+lab2_add.c: program that test synchronization, yield with threads using an add function
+SortedList.h: a header file describing the interfaces for linked list operations.
+SortedList.c: a C module that implements insert, delete, lookup, and length methods
+              for a sorted doubly linked list
+lab2_list.c: program that test synchronization, yield with threads using a linked list
+lab2_add.csv: containing all of the results for all of the Part-1 tests.
+lab2_list.csv: containing all of the results for all of the Part-2 tests.
+lab2_add-1.png: threads and iterations required to generate a failure (with and 
+                without yields) graph
+lab2_add-2.png: average time per operation with and without yields graph
+lab2_add-3.png: average time per (single threaded) operation vs. the number of 
+                iterations graph
+lab2_add-4.png: threads and iterations that can run successfully with yields under 
+                each of the synchronization options graph
+lab2_add-5.png: average time per (protected) operation vs. the number of threads graph
+lab2_list-1.png: average time per (single threaded) unprotected operation vs. number of
+                 iterations (illustrating the correction of the per-operation cost for 
+                 the list length).
+lab2_list-2.png: threads and iterations required to generate a failure (with and without
+                 yields).
+lab2_list-3.png: iterations that can run (protected) without failure.
+lab2_list-4.png: (length-adjusted) cost per operation vs the number of threads for the 
+                 various synchronization options.
+README:
+Makefile: A Makefile to build the deliverable programs (lab2_add and lab2_list), output,
+          graphs, and tarball
+test-add.sh: shell script to run and record all the test for lab2_add
+test-list.sh: shell script to run and record all the test for lab2_list
+
+QUESTIONS
+
 QUESTION 2.1.1 - causing conflicts:
 Why does it take many iterations before errors are seen?
 Why does a significantly smaller number of iterations so seldom fail?
@@ -13,3 +46,40 @@ we might only see it if we do it many many times. A small number of iteration mi
 not produce the outcome of the rarer events since there is a higher chance of the
 usual event happening (no race condition). This is analogous to The Law of Large 
 Numbers in the field of Statistics.
+
+QUESTION 2.1.2 - cost of yielding:
+The yield runs much slower because threads are giving up its timeslice even when it
+doesn't have to, this creates more overhead since it might not be done with what it
+was doing.
+The additional time goes to calling sched_yield() and giving up its timeslice (e.g. 
+additional context switch)
+It is not possible because we can't not know in advance the time each context switch takes.
+
+QUESTION 2.1.3 - measurement errors:
+The average cost per operation drop with increasing iterations because with the same
+number of operations, using more iteration creates less overhead than threads. Therefore 
+the more iterations instead of threads, the less cost per operation
+Base on the graph, the correct cost is where an increase in iterations does not change
+the cost per operation. This is how we can tell what the correct cost is.
+
+QUESTION 2.1.4 - costs of serialization:
+
+This might due to how powerful the CPU is. With a small number of threads, the overheads
+is small enough so that the CPU can process it all with the same speed as processing just
+one thread.
+This is due to the waiting time between threads when one thread is in critical condition.
+Because it is protected, other threads have to wait until the thread with the lock release
+its lock.
+
+QUESTION 2.2.1 - scalability of Mutex
+In both graphs, an increase in the number of threads seems does not seem to affect the cost
+per operation by a lot. The affect of the increase of the number of threads is, however,
+seems to affect part 2 more since the thread_worker's function has more instructions than
+part 1 add. Therefore, staying longer in one critical condition might drive down the cost
+per operation since the context switch time is less in proportion to the execution time.
+
+QUESTION 2.2.2 - scalability of spin locks
+The spinlock protected takes more time than mutex because for spinlock, there is additional
+time for the lock to spin while for mutex, other threads will give up its timeslice right
+away if some thread already has the lock. This is why we can see from the graph that
+from 4 threads and above, spinlock's cost per operations is higher
