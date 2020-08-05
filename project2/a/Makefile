@@ -16,7 +16,7 @@ lab2_add: lab2_add.o
 	$(CC) $(CFLAGS) -pthread -o lab2_add lab2_add.o
 
 lab2_list: lab2_list.o SortedList.o
-	$(CC) $(CFLAGS) -o -pthread lab2_list lab2_list.o SortedList.o
+	$(CC) $(CFLAGS) -pthread -o lab2_list lab2_list.o SortedList.o
 
 lab2_add.o: lab2_add.c
 	$(CC) $(CFLAGS) -c lab2_add.c
