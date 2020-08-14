@@ -18,4 +18,4 @@ clean:
 
 .PHONY: dist
 dist:
-	tar -zcvf $(TARGET)-105215636.tar.gz $(TARGET).c Makefile README
+	tar -zcvf $(TARGET)-105215636.tar.gz my_beaglebone.jpg connected.png copy.png build_run.png git.png Makefile README 

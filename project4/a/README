@@ -1,3 +1,14 @@
 NAME: Son Dang
 EMAIL: sonhdang@ucla.edu
 ID: 105215636
+
+FILE DESCRIPTION
+- my_beaglebone.jpg: a selfie of you holding your assembled Beaglebone (showing the front of the board).
+- connected.png: a screen shot from a USB terminal command session connected to your system, showing that you gave it a name and configured network access.
+- copy.png: a screen shot from a local session in which you copy a hello world program from your laptop/desktop to your Beaglebone.
+- build_run.png: a screen shot from a WIFI SSH session in which you build and run a trivial (hello world) program.
+- git.png: a screen shot from a WIFI SSH session in which you install git and clone a repository.
+- a Makefile to build the tarball.
+
+Beaglebone S/N: BBGW18031190
+MAC address: 40:bd:32:5a:42:b7
