@@ -3,7 +3,7 @@
 #ID: 105215636
 
 CC=gcc
-CFLAGS=-Wall -Wextra -lmraa
+CFLAGS=-Wall -Wextra -lmraa -lm
 TARGET=lab4b
 
 .PHONY: check clean dist
