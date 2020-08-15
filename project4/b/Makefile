@@ -8,17 +8,15 @@ TARGET=lab4b
 
 .PHONY: check clean dist
 
-$(TARGET): $(TARGET).o
-	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).o
-
-$(TARGET).o: $(TARGET).c
-	$(CC) $(CFLAGS) -c $(TARGET).c
+$(TARGET): $(TARGET).c
+	./compile.sh
 
 check:
-
+	{ echo "PERIOD = 2"; sleep 3; echo "STOP"; sleep 2; echo "OFF"; } | ./lab4b --scale=C --log=output.txt
+	rm output.txt
 
 clean:
-	rm -f $(TARGET) $(TARGET).o lab4b-105215636.tar.gz
+	rm -f $(TARGET) lab4b-105215636.tar.gz compile.sh
 
 dist:
-	tar -zcvf lab4b-105215636.tar.gz lab4b.c Makefile README
+	tar -zcvf lab4b-105215636.tar.gz lab4b.c Makefile README compile.sh
