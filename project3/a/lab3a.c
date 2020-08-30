@@ -9,26 +9,29 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <string.h>
 #include "ext2_fs.h"
 
-int BLOCK_SIZE;
-int BLOCKS_COUNT;
-int BLOCKS_PER_GROUP;
-int INODE_SIZE;
-int INODES_PER_GROUP;
-int INODES_COUNT;
-int GROUPS_COUNT;
-int BLOCK_BITMAP_ADDR;
-int INODE_BITMAP_ADDR;
-int INODE_TABLE_ADDR;
+unsigned int BLOCK_SIZE;
+unsigned int BLOCKS_COUNT;
+unsigned int BLOCKS_PER_GROUP;
+unsigned int INODE_SIZE;
+unsigned int INODES_PER_GROUP;
+unsigned int INODES_COUNT;
+unsigned int GROUPS_COUNT;
+unsigned int BLOCK_BITMAP_ADDR; // Starting address of Block bitmap
+unsigned int INODE_BITMAP_ADDR; // Starting address of Inode bitmap
+unsigned int INODE_TABLE_ADDR;  // Starting address of Inode table
 char datetime_str[24];
 
-void fail(char* message)
+// Exit with failure
+void fail(char* message)    
 {
     fprintf(stderr, "Error: %s\n", message);
     exit(EXIT_FAILURE);
 }
 
+// Printing date and time in GMT for Inodes
 char* print_datetime(int epoch)
 {
     struct tm *time_object;
@@ -40,11 +43,12 @@ char* print_datetime(int epoch)
     return datetime_str;
 }
 
-void read_superblock(int file)
+// Output superblock summary
+void read_superblock(int file)  // Print
 {
     struct ext2_super_block super;
     pread(file, &super, sizeof(super), 1024);
-    BLOCK_SIZE = EXT2_MIN_BLOCK_SIZE << super.s_log_block_size;
+    BLOCK_SIZE = EXT2_MIN_BLOCK_SIZE << super.s_log_block_size; // Formula for getting block size
     BLOCKS_COUNT = super.s_blocks_count;
     GROUPS_COUNT = super.s_blocks_count / super.s_blocks_per_group + 1;
     BLOCKS_PER_GROUP = super.s_blocks_per_group;
@@ -58,19 +62,21 @@ void read_superblock(int file)
     
 }
 
+// Output group summary
 void read_group(int file)
 {
     struct ext2_group_desc group;
     int group_desc_addr;
-    int group_num = 0;
-    if (BLOCK_SIZE == 1024)
+    unsigned int group_num = 0;
+    
+    if (BLOCK_SIZE == 1024)     // If block size is 1024, Group Descriptors at block 2
         group_desc_addr = BLOCK_SIZE * 2;
-    else
+    else                        // If block size > 1024, Group Descriptors at block 1
     {
         group_desc_addr = BLOCK_SIZE;
     }
 
-    lseek(file, group_desc_addr, SEEK_SET);
+    lseek(file, group_desc_addr, SEEK_SET);     // Moving the read offset to the right address
 
     while(read(file, &group, sizeof(group)) != 0 && group_num < GROUPS_COUNT)
     {
@@ -86,41 +92,115 @@ void read_group(int file)
     }
 }
 
+// Output Free blocks summary
 void read_free_blocks(int file)
 {
 
-    int byte_num = 0;
-    int bit_num = 1;
+    int byte_offset = 0;
+    unsigned int block = 1;     // First block of block bitmap is indexed 1
     char c;
-    while (bit_num < BLOCKS_COUNT)
+    while (block <= BLOCKS_COUNT)
     {
-        pread(file, &c, 1, BLOCK_BITMAP_ADDR + byte_num);
-        for(int i = 0; i < 8; i++)
+        pread(file, &c, 1, BLOCK_BITMAP_ADDR + byte_offset);
+        for(int i = 0; i < 8; i++)  // Reading every bit (8 total) of a byte
         {
             int lsb = c & 1;
             c = c >> 1;
             if (lsb == 0)
-                printf("BFREE,%d\n", bit_num);
-            bit_num++;
+                printf("BFREE,%d\n", block);
+            block++;
         }
-        byte_num++;
+        byte_offset++;
+    }
+}
+
+// Output directory info
+void read_directory(int parent_inode, int block, int file)
+{
+    unsigned int offset = 0;
+    struct ext2_dir_entry dir;
+    char name[EXT2_NAME_LEN + 1];   // 1 extra bit for the string terminating value '\0'
+    while (offset < BLOCK_SIZE && 
+        pread(file, &dir, sizeof(dir), block * BLOCK_SIZE + offset) > 0)
+    {
+        memcpy(name, dir.name, dir.name_len);
+        name[dir.name_len] = '\0';
+        printf("DIRENT,%d,%d,%d,%d,%d,'%s'\n",
+            parent_inode, offset, dir.inode, dir.rec_len, dir.name_len, name);
+        offset += dir.rec_len;
+    }
+}
+
+// Output summary of indirect blocks (recursive function)
+void read_indirect(int file, int inode, int level, int block)
+{
+    if(level == 1)      // Single Indirect Block
+    {
+        int block_number = 1;   // Index of Inderect block in the same level
+        unsigned int offset = 0;
+        __u32 logical_block;
+        while (offset < BLOCK_SIZE)
+        {
+            pread(file, &logical_block, sizeof(__u32), BLOCK_SIZE * block + offset);
+            if (logical_block == 0)
+            {
+                break;
+            }
+            printf("INDIRECT,%d,%d,%d,%d,%d\n", inode, level, logical_block, block_number, block);
+            block_number++;
+            offset += sizeof(__u32);
+        }
+        return;
+    }
+    else if(level == 2)     // Double Indirect Block
+    {
+        int block_number = 1;
+        unsigned int offset = 0;
+        __u32 logical_block;
+        while (offset < BLOCK_SIZE)
+        {
+            pread(file, &logical_block, sizeof(__u32), BLOCK_SIZE * block + offset);
+            if (logical_block == 0)
+                break;
+            printf("INDIRECT,%d,%d,%d,%d,%d\n", inode, level, logical_block, block_number, block);
+            read_indirect(file, inode, 1, logical_block);
+            block_number++;
+            offset += sizeof(__u32);
+        }
+    }
+    else if(level == 3)     // Triple Indirect Block
+    {
+        int block_number = 1;
+        unsigned int offset = 0;
+        __u32 logical_block;
+        while (offset < BLOCK_SIZE)
+        {
+            pread(file, &logical_block, sizeof(__u32), BLOCK_SIZE * block + offset);
+            if (logical_block == 0)
+                break;
+            printf("INDIRECT,%d,%d,%d,%d,%d\n", inode, level, logical_block, block_number, block);
+            read_indirect(file, inode, 2, logical_block);
+            block_number++;
+            offset += sizeof(__u32);
+        }
     }
 }
 
 void read_inodes(int file)
 {
     int byte_num = 0;
-    int bit_num = 0;
+    unsigned int bit_num = 0;
     char c;
     while (bit_num < INODES_COUNT)
     {
         pread(file, &c, 1, INODE_BITMAP_ADDR + byte_num);
         for(int i = 0; i < 8; i++)
-        {
+        {                               // In ext2_fs.h, root inode (EXT2_ROOT_INODE) starts
+            int inode = bit_num + 1;    // at 2 since inode 1 is bad inode (EXT2_BAD_INODE)
             int lsb = c & 1;
             c = c >> 1;
             if (lsb == 0)
-                printf("IFREE,%d\n", bit_num + 1);
+                printf("IFREE,%d\n", inode);
             else
             {
                 struct ext2_inode i_node;
@@ -132,15 +212,15 @@ void read_inodes(int file)
                 pread(file, &i_node, sizeof(i_node),
                     INODE_TABLE_ADDR + bit_num * INODE_SIZE);
 
-                if (i_node.i_links_count != 0)
+                if (i_node.i_links_count != 0)          // categorizing file type
                 {
-                    if (S_ISDIR(i_node.i_mode))
+                    if (S_ISDIR(i_node.i_mode))         // File is a directory
                         type = 'd';
-                    else if (S_ISREG(i_node.i_mode))
+                    else if (S_ISREG(i_node.i_mode))    // File is a regular file
                         type = 'f';
-                    else if (S_ISLNK(i_node.i_mode))
+                    else if (S_ISLNK(i_node.i_mode))    // File is a symbolic link
                         type = 's';
-                    else
+                    else                                // File is indeterminable
                         type = '?';
 
                     inode_change_time = print_datetime(i_node.i_ctime);
@@ -148,12 +228,13 @@ void read_inodes(int file)
                     inode_accessed_time = print_datetime(i_node.i_atime);
                     
                     printf("INODE,%d,%c,%o,%d,%d,%d,%s,%s,%s,%d,%d",
-                        bit_num + 1, type, i_node.i_mode & 0xFFF, i_node.i_uid,
+                        inode, type, i_node.i_mode & 0xFFF, i_node.i_uid,
                         i_node.i_gid, i_node.i_links_count, inode_change_time, 
                         inode_modified_time, inode_accessed_time,
                         i_node.i_size, i_node.i_blocks);
-                    if (type == 's' && i_node.i_size <= 60)
-                        printf("\n");
+
+                    if (type == 's' && i_node.i_size <= 60) // For symbolic links with file
+                        printf("\n");                       // size less than 60 bytes
                     else
                     {
                         for (int i = 0; i < EXT2_N_BLOCKS; i++)
@@ -162,6 +243,35 @@ void read_inodes(int file)
                         }
                         printf("\n");
                     }
+
+                    if (type == 'd')    // Output more information if file is a directory
+                    {
+                        // since i_blocks size is 512 bytes while the actual
+                        // block size EXT2_MIN_BLOCK_SIZE is 1024
+                        int actual_blocks_num = i_node.i_blocks / 2;
+                        if (actual_blocks_num <= 12)
+                        {
+                            for (int i = 0; i < actual_blocks_num; i++)
+                            {
+                                read_directory(inode, i_node.i_block[i], file);
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i < EXT2_NDIR_BLOCKS; i++)
+                            {
+                                read_directory(inode, i_node.i_block[i], file);
+                            }
+                        }
+                    }
+                    
+                    // Output a summary of all indirect blocks
+                    if (i_node.i_block[EXT2_IND_BLOCK] != 0)
+                        read_indirect(file, inode, 1, i_node.i_block[EXT2_IND_BLOCK]);
+                    if (i_node.i_block[EXT2_DIND_BLOCK] != 0)
+                        read_indirect(file, inode, 2, i_node.i_block[EXT2_DIND_BLOCK]);
+                    if (i_node.i_block[EXT2_TIND_BLOCK] != 0)
+                        read_indirect(file, inode, 3, i_node.i_block[EXT2_TIND_BLOCK]);
                 }
 
             }
@@ -172,11 +282,7 @@ void read_inodes(int file)
     }
 }
 
-void read_directory(int file, int inode)
-{
-    struct ext2_inode i_node;
 
-}
 
 int main(int argc, char *argv[])
 {
@@ -184,12 +290,12 @@ int main(int argc, char *argv[])
     
 
     if (argc != 2)
-        fail("invalid input");
+        fail("invalid input");          // Invalid input for the program
     else
     {
         fd = open(argv[1], O_RDONLY);
         if (fd < 0)
-            fail("fail to open file");
+            fail("fail to open file");  // Cannot find file
     }
 
     read_superblock(fd);
