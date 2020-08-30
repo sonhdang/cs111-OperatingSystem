@@ -76,15 +76,13 @@ void read_group(int file)
         group_desc_addr = BLOCK_SIZE;
     }
 
-    lseek(file, group_desc_addr, SEEK_SET);     // Moving the read offset to the right address
-
-    while(read(file, &group, sizeof(group)) != 0 && group_num < GROUPS_COUNT)
+    while(pread(file, &group, sizeof(group), group_desc_addr) != 0 && group_num < GROUPS_COUNT)
     {
         BLOCK_BITMAP_ADDR = group.bg_block_bitmap * BLOCK_SIZE;
         INODE_BITMAP_ADDR = group.bg_inode_bitmap * BLOCK_SIZE;
         INODE_TABLE_ADDR = group.bg_inode_table * BLOCK_SIZE;
         printf("GROUP,%d,%d,%d,%d,%d,%d,%d,%d\n",
-            group_num, BLOCKS_PER_GROUP, INODES_PER_GROUP,
+            group_num, BLOCKS_COUNT, INODES_PER_GROUP,
             group.bg_free_blocks_count, group.bg_free_inodes_count,
             group.bg_block_bitmap, group.bg_inode_bitmap,
             group.bg_inode_table);

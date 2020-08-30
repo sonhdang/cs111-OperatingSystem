@@ -10,7 +10,7 @@ TARGET=lab3a
 
 default: $(TARGET)
 	
-$(TARGET): $(TARGET).o
+$(TARGET): $(TARGET).o ext2_fs.h
 	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).o
 
 $(TARGET).o: $(TARGET).c
@@ -20,4 +20,4 @@ clean:
 	rm -f *.o lab3a_105215636.tar.gz $(TARGET)
 
 dist:
-	tar -zcvf lab3a-105215636.tar.gz README Makefile lab3a.c
+	tar -zcvf lab3a-105215636.tar.gz README Makefile lab3a.c ext2_fs.h
